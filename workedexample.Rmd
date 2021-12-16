@@ -1,0 +1,301 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+
+```{r}
+#Load the libraries that we will use
+
+library(tidyverse)
+library(here)
+library(tidytext)
+library(rtweet)
+library(randomNames)
+library(tidygraph)
+library(ggraph)
+```
+
+
+Μέρος Α: Ανάγνωση δεδομενων!
+δηλαδη? θα εισάγω τα δεδομένα από το αρχείο covid19_tweets.csv σε μία δομή δεδομένων της R. Αυτή τη δομή δεδομένων, θα την ονομάσω tweets.Από εδώ και στο εξής, θα μπορώ να ανασύρω ή να καλέσω τα δεδομένα μου χρησιμοποιώντας το όνομα tweets
+
+```{r}
+#read the text data to use for today's example
+
+tweets <- read.csv("./covid19_tweets.csv")
+head(tweets)
+```
+
+
+Λίγα λόγια για την επισκόπηση δεδομένων. Είτε μέσω κώδικα, είτε μέσω διεπιφάνειας χρήστη :)
+
+```{r}
+tweets[1:4,'user_name']
+tweets[1:4,1]
+head(tweets$user_name,4)
+```
+
+και λιγα λόγια για την προσπέλαση δεδομένων....
+```{r}
+tweets$user_name
+tweets$user_name[4]
+```
+
+(Κάτι περίεργοι...) τύποι δεδομένων!
+```{r}
+#take a closer look at the data and the data types
+tweets$text <- as.character(tweets$text)
+
+
+names(tweets)
+glimpse(tweets)
+```
+
+##Interactions, interactions everywhere!
+(an intro to social network analysis)
+
+Μέρος Β:
+και κολλάω εγώ τ' αυτί
+τι είπε αυτός και τι είπε αυτή"
+<a href= "https://youtu.be/527gCV8WeWg">what</a>
+
+Στο twitter, οταν κάποιος θέλει να απευθύνει τον λόγο σε κάποιον άλλο, χρησιμοποιεί το σύμβολο @ και το όνομα του χρήστη, πχ. @irene
+
+ας απομονώσουμε αυτές τις περιπτώσεις:
+
+```{r}
+regex <- "@([A-Za-z]+[A-Za-z0-9_]+)(?![A-Za-z0-9_]*\\.)"
+
+tweets <-
+  tweets %>%
+  # Use regular expression to identify all the usernames in a tweet
+  mutate(all_mentions = str_extract_all(text, regex)) %>%
+  unnest(all_mentions)
+```
+
+να το δούμε αναλυτικά;
+
+```{r}
+all_mentions <- str_extract_all(tweets$text, regex)
+all_mentions
+```
+δηλαδή επαναλαμβάνουμε εγγραφές για το ίδιο tweet ανάλογα με τους "παραλήπτες"
+
+
+ας τα ξεχωρίσουμε τώρα...
+
+```{r}
+mentions <-
+  tweets %>%
+  mutate(all_mentions = str_trim(all_mentions)) %>%
+  select(sender = user_name, all_mentions)
+head(mentions)
+```
+
+ αλλα που ειναι οι σχέσεις?
+ 
+```{r}
+edgelist <- 
+  mentions %>% 
+  # remove "@" from all_mentions column
+  mutate(all_mentions = str_sub(all_mentions, start = 2)) %>% 
+  # rename all_mentions to receiver
+  select(sender, receiver = all_mentions)
+head(edgelist)
+```
+ Μέρος Γ:
+ οπτικοποίηση δεδομένων
+ 
+```{r}
+interactions_sent <- edgelist %>% 
+  # this counts how many times each sender appears in the data frame, effectively counting how many interactions each individual sent 
+  count(sender) %>% 
+  # arranges the data frame in descending order of the number of interactions sent
+  arrange(desc(n))
+
+head(interactions_sent)
+nrow(interactions_sent)
+
+```
+ 
+ (Να το περιορίσουμε λίγο? Πχ. ας πούμε ότι ενδιαφερόμαστε για χρήστες που έκαναν παραπάνω από x mentions?)
+ 
+```{r}
+interactions_sent <- 
+  interactions_sent %>% 
+  filter(n > 1)
+
+nrow(interactions_sent)
+```
+ 
+και κρατάμε μόνο αυτούς τους χρήστες από το αρχικό σετ
+```{r}
+nrow(edgelist)
+edgelist <- edgelist %>% 
+  # the first of the two lines below filters to include only senders in the interactions_sent data frame
+  # the second line does the same, for receivers
+  filter(sender %in% interactions_sent$sender,
+        receiver %in% interactions_sent$sender)
+nrow(edgelist)
+```
+
+```{r}
+#first column sender, second column receiver
+g <- 
+  as_tbl_graph(edgelist)
+
+g
+```
+
+```{r}
+#first column sender, second column receiver
+g %>%
+  # we chose the kk layout as it created a graph which was easy-to-interpret, but others are available; see ?ggraph
+  ggraph(layout = "kk") +
+  # this adds the points to the graph
+  geom_node_point() +
+  # this adds the links, or the edges; alpha = .2 makes it so that the lines are partially transparent
+  geom_edge_link(alpha = .2) +
+  # this last line of code adds a ggplot2 theme suitable for network graphs
+  theme_graph()
+```
+Μέρος Δ:
+ΝΑΙ, ΤΟ ΚΑΤΑΛΑΒΑ ΚΑΙ ΘΕΛΩ Ν'ΑΚΟΥΣΩ ΚΙ ΑΛΛΑ!
+
+## Sentiment Analysis
+Εδώ θα δουλέψουμε με τις ημερομηνίες των μηνυμάτων και τα κείμενα.
+Οι ημερομηνίες θα χρησιμοποιηθούν ως "identifiers"
+
+```{r}
+clean_tweets <-
+  tweets %>%
+  select(date, text) %>%
+  # Convert the ID field to the character data type
+  mutate(date = as.character(date))
+
+head(clean_tweets)
+```
+Καθαρίζω τα κείμενα λίγο...
+
+```{r}
+clean_tweets$text <- gsub("https\\S*", "", clean_tweets$text) 
+clean_tweets$text <- gsub("@\\S*", "", clean_tweets$text) 
+clean_tweets$text <- gsub("amp", "", clean_tweets$text) 
+clean_tweets$text <- gsub("[\r\n]", "", clean_tweets$text)
+clean_tweets$text <- gsub("[[:punct:]]", "", clean_tweets$text)
+
+```
+
+Και δημιουργώ "tokens" δηλαδή σπάω τα κείμενα σε λέξεις
+
+```{r}
+tokens <- 
+  clean_tweets %>%
+  unnest_tokens(output = word, input = text)
+
+tokens 
+```
+καθαρίζω από λεξεις που δεν μεταφέρουν πληροφορία. Παραδειγμα?
+
+```{r}
+data(stop_words)
+
+tokens <-
+  tokens %>%
+  anti_join(stop_words, by = "word")
+```
+
+ποσες λέξεις μου έμειναν?
+```{r}
+tokens %>% 
+    count(word)
+```
+Πόσες φορές εμφανίζεται η κάθε λέξη?
+```{r}
+word_freq<- tokens %>% 
+    count(word)
+```
+
+Να τις βάλουμε σε φθίνουσα σειρά?
+```{r}
+word_freq<- tokens %>% 
+    count(word, sort = TRUE)
+```
+
+και καλύτερα μήπως να υπολογίζαμε ποσοστά;
+```{r}
+word_freq<- tokens %>%
+  count(word, sort = TRUE) %>%
+  # n as a percent of total words
+  mutate(percent = n / sum(n) * 100)
+```
+
+the long and winding road...
+```{r}
+length(tokens$word[which(tokens$word=="covid19")])
+length(tokens$word)
+
+length(tokens$word[which(tokens$word=="covid19")]) /length(tokens$word) *100
+```
+
+Οι λέξεις έχουν "βάρος"....
+```{r}
+get_sentiments("bing")
+```
+
+
+
+```{r}
+bing_neg <-
+  get_sentiments("bing") %>%
+  filter(sentiment == "negative")
+
+# Match to tokens
+neg_tokens_count <-
+  tokens %>%
+  inner_join(bing_neg, by = "word") %>%
+  # Total appearance of positive words
+  count(word, sort = TRUE) 
+
+neg_tokens_count
+
+```
+
+
+να δούμε και τα θετικά;
+```{r}
+
+bing_neg <-
+  get_sentiments("bing") %>%
+  filter(sentiment == "positive")
+
+# Match to tokens
+neg_tokens_count <-
+  tokens %>%
+  inner_join(bing_neg, by = "word") %>%
+  # Total appearance of positive words
+  count(word, sort = TRUE) 
+
+neg_tokens_count
+
+```
+Θα λήθελα να ξέρω πόσες λέξεις με θετική συσχέτιση, εμφανίζονται στα μηνύματα παραπάνω από 200 φορες.... και ειμαι και οπτικός τύπος!
+```{r}
+
+neg_tokens_count %>%
+  # only words that appear 1000 times or more
+  filter(n >= 200) %>%
+  ggplot(., aes(x = reorder(word, -n), y = n)) +
+  geom_bar(stat = "identity", fill = ("darkblue")) +
+  labs(
+    title = "Count of Words Associated with Positivity",
+    subtitle = "Tweets with the hashtag #covid-19",
+    caption = "Data: Twitter and Covid-19",
+    x = "",
+    y = "Count"
+  ) 
+```
+
