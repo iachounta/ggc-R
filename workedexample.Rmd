@@ -1,11 +1,12 @@
 ---
-title: "R Notebook"
+title: "A Hands-on Introduction to R - Female Code Lab"
 output: html_notebook
 ---
 
 This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+Materials and resources used in this practical demonstration are referenced at the end of this notebook.
 
-
+Κάθε αρχή και .... διάβασμα! όπως σε όλες(?) τις γλώσσες προγραμματισμού, ετσι και στην R, ξεκινάμε με το να εισαγουμε τις βιβλιοθήκες που θα χρησιμοποιήσουμε στο παρόν παράδειγμα. Τώρα θα μου πεις "και που να ξέρω κυρία μου τι θα χρησιμοποιήσω σαράντα γραμμές πιο κάτω?". Ορθόν! εγώ συνήθως ακολουθώ ένα iterative process ή αλλιώς, όπως θα έλεγε η γιαγιά μου, "βλέποντας και κάνοντας". Καθώς δηλαδή προχωρώ, αν ανακαλύψω ότι ξέχασα να εισάγω κάποια βιβλιοθήκη, τότε γυρίζω πίσω (εδώ, δηλαδή) και την συμπληρώνω. 
 ```{r}
 #Load the libraries that we will use
 
@@ -16,11 +17,13 @@ library(rtweet)
 library(randomNames)
 library(tidygraph)
 library(ggraph)
+library(igraph)
 ```
 
 
 Μέρος Α: Ανάγνωση δεδομενων!
 δηλαδη? θα εισάγω τα δεδομένα από το αρχείο covid19_tweets.csv σε μία δομή δεδομένων της R. Αυτή τη δομή δεδομένων, θα την ονομάσω tweets.Από εδώ και στο εξής, θα μπορώ να ανασύρω ή να καλέσω τα δεδομένα μου χρησιμοποιώντας το όνομα tweets
+Η εντολή head μου δίνει μια γρήγορη επισκόπιση των δεδομένων που μολις διάβασα, ουσιαστικά τις έξι πρώτες γραμμές/εγγραφές που βρίσκονται τώρα στη δομή δεδομένων.
 
 ```{r}
 #read the text data to use for today's example
@@ -31,6 +34,7 @@ head(tweets)
 
 
 Λίγα λόγια για την επισκόπηση δεδομένων. Είτε μέσω κώδικα, είτε μέσω διεπιφάνειας χρήστη :)
+Όλοι οι παρακάτω τρόποι δίνουν το ίδιο αποτέλεσμα!
 
 ```{r}
 tweets[1:4,'user_name']
@@ -38,13 +42,11 @@ tweets[1:4,1]
 head(tweets$user_name,4)
 ```
 
-και λιγα λόγια για την προσπέλαση δεδομένων....
-```{r}
-tweets$user_name
-tweets$user_name[4]
-```
+
 
 (Κάτι περίεργοι...) τύποι δεδομένων!
+Για να διαβάσω μία στήλη από τη δομή δεδομένων μου, αρκεί να την καλέσω με το όνομα της δομής, το χαρακτήρα $ και το ονομα της στήλης.
+Χρησιμοποιώντας την εντολή "names"μπορώ να δω τα ονόματα των στηλών στη δομή δεδομένων και με την εντολή glimpse μπορώ να δώ επιπρόσθετες πληροφορίες όπως ας πούμε τον τύπο δεδομένων (ακέραιοι, χαρακτήρες κλπ.)
 ```{r}
 #take a closer look at the data and the data types
 tweets$text <- as.character(tweets$text)
@@ -71,21 +73,11 @@ regex <- "@([A-Za-z]+[A-Za-z0-9_]+)(?![A-Za-z0-9_]*\\.)"
 
 tweets <-
   tweets %>%
-  # Use regular expression to identify all the usernames in a tweet
+  # Use regular expression stored in regex to identify all the usernames in a tweet
   mutate(all_mentions = str_extract_all(text, regex)) %>%
   unnest(all_mentions)
 ```
 
-να το δούμε αναλυτικά;
-
-```{r}
-all_mentions <- str_extract_all(tweets$text, regex)
-all_mentions
-```
-δηλαδή επαναλαμβάνουμε εγγραφές για το ίδιο tweet ανάλογα με τους "παραλήπτες"
-
-
-ας τα ξεχωρίσουμε τώρα...
 
 ```{r}
 mentions <-
@@ -111,9 +103,8 @@ head(edgelist)
  
 ```{r}
 interactions_sent <- edgelist %>% 
-  # this counts how many times each sender appears in the data frame, effectively counting how many interactions each individual sent 
+   
   count(sender) %>% 
-  # arranges the data frame in descending order of the number of interactions sent
   arrange(desc(n))
 
 head(interactions_sent)
@@ -121,11 +112,12 @@ nrow(interactions_sent)
 
 ```
  
- (Να το περιορίσουμε λίγο? Πχ. ας πούμε ότι ενδιαφερόμαστε για χρήστες που έκαναν παραπάνω από x mentions?)
+ (Να το περιορίσουμε λίγο? Πχ. ας πούμε ότι ενδιαφερόμαστε για χρήστες που έκαναν παραπάνω από 1 mentions?)
  
 ```{r}
 interactions_sent <- 
   interactions_sent %>% 
+  #next line filters mentions based on count, e.g. filter out less than one
   filter(n > 1)
 
 nrow(interactions_sent)
@@ -135,8 +127,6 @@ nrow(interactions_sent)
 ```{r}
 nrow(edgelist)
 edgelist <- edgelist %>% 
-  # the first of the two lines below filters to include only senders in the interactions_sent data frame
-  # the second line does the same, for receivers
   filter(sender %in% interactions_sent$sender,
         receiver %in% interactions_sent$sender)
 nrow(edgelist)
@@ -153,17 +143,88 @@ g
 ```{r}
 #first column sender, second column receiver
 g %>%
-  # we chose the kk layout as it created a graph which was easy-to-interpret, but others are available; see ?ggraph
+  # you can choose other layouts, maybe you want to try at home "drl"
   ggraph(layout = "kk") +
   # this adds the points to the graph
   geom_node_point() +
-  # this adds the links, or the edges; alpha = .2 makes it so that the lines are partially transparent
+  # this adds the links, or the edges; alpha defines the weight of the line, that is a value of 0.8 will make it stronger
   geom_edge_link(alpha = .2) +
-  # this last line of code adds a ggplot2 theme suitable for network graphs
+  
+  #geom_node_text(aes(label = name), repel = TRUE, size = 10)  +
+  theme_graph()
+```
+Ερώτηση: πως μπορούμε να δούμε ονόματα χρηστών στον γράφο?
+Η λύση ειναι απλή, όμως αν επιχειρήσω να εισάγω ονοματα στον παραπάνω γράφο, η επισκόπηση θα είναι μάλλον αδύνατη λόγω του σχετικά μεγάλου αριθμού κόμβων.
+Οπότε, θα επιχειρήσω να περιορίσω το μέγεθος του γράφου και μετά θα σχηματίσω το νέο, μικρότερο δίκτυο με τα ονόματα των χρηστών!
+```{r}
+interactions_sent_subset <- 
+  interactions_sent %>% 
+  #next line filters mentions based on count, e.g. filter out less than one
+  filter(n >= 5)
+
+edgelist_subset <- edgelist %>% 
+  filter(sender %in% interactions_sent_subset$sender,
+        receiver %in% interactions_sent_subset$sender)
+
+#first column sender, second column receiver
+g_subset <- 
+  as_tbl_graph(edgelist_subset, weighted = TRUE)
+
+g_subset
+```
+
+Όλα όπως πριν εκτός από μια γραμμή!
+```{r}
+g_subset %>%
+  ggraph(layout = "kk") +
+  geom_node_point() +
+  
+  geom_edge_link(alpha = .2) +
+  #the following line prints out the name of each user (node) using font size 3
+  geom_node_text(aes(label = name), repel = TRUE, size = 3)  +
+  theme_graph()
+```
+
+Ερώτηση: μπορούμε να δούμε τη "δύναμη" της αλληλεπίδρασης μεταξύ δύο χρηστών?
+Ναι, φυσικά! 'Ομως πριν, ας ορίσουμε τι εννοούμε όταν λεμε "δύναμη". Γενικά,όταν δουλεύουμε με κοινωνικά δίκτυα ορίζουμε την δύναμη ή το βάρος της αλληλεπίδρασης μεταξύ χρηστών συναρτήσει της συχνότητας επικοινωνίας τους ή του αριθμού μηνυμάτων που έχουν ανταλλάξει μεταξύ τους. 
+Για το συγκεκριμένο παράδειγμα, ας πουμε ότι το βάρος ορίζεται ως ο αριθμός mentions ενός χρήστη προς έναν άλλο.
+
+Σε πρώτη φάση, για τον απλοποιημένο γράφο του προηγούμενου παραδείγματος, θα μετρήσω πόσες φορές ένας χρήστης έκανε mention έναν άλλο και αυτόν τον αριθμό θα τον θέσω ως weight για να περιγράψω τη "δύναμη" της αλληλεπίδρασής τους.
+Για να το κάνω αυτό, ορίζω τη συνάρτηση edge.count που μου μετράει πόσες φορές επαναλαμβάνεται ένα ζεύγος "sender-receiver" και αποθηκεύω τα αποτελέσματα στη δομή δεδομένων weighted.edges
+```{r}
+edge.count <- function(g){
+     result <- cbind(E(g), count.multiple(g))
+     colnames(result) <- c("edge", "count")
+     result
+}
+
+weighted.edges <- as.data.frame(edge.count(g_subset))
+#weighted.edges["percent"] <- weighted.edges$count / sum(weighted.edges$count) 
+```
+
+
+Στη συνέχεια, προσθέτω τη νέα πληροφορία για τα βάρη (weights) στον γράφο που ήδη έχω κατασκευάσει
+```{r}
+g_weighted_subset <- g_subset %>% activate(edges) %>% mutate(weight = weighted.edges$count)
+g_weighted_subset
+```
+
+Και τελευταίο βήμα, τυπώνω ξανά τον γράφο!
+
+```{r}
+g_weighted_subset %>%
+  ggraph(layout = "kk") +
+  geom_edge_link(aes(edge_width = weight)) + 
+  geom_node_point() +
+  
+  geom_edge_link(alpha = .2) +
+  #the following line prints out the name of each user (node) using font size 3
+  geom_node_text(aes(label = name), repel = TRUE, size = 3)  +
   theme_graph()
 ```
 Μέρος Δ:
-ΝΑΙ, ΤΟ ΚΑΤΑΛΑΒΑ ΚΑΙ ΘΕΛΩ Ν'ΑΚΟΥΣΩ ΚΙ ΑΛΛΑ!
+Ναι, το κατάλαβα και θέλω ν'ακούσω κι άλλα!
+
 
 ## Sentiment Analysis
 Εδώ θα δουλέψουμε με τις ημερομηνίες των μηνυμάτων και τα κείμενα.
@@ -175,7 +236,6 @@ clean_tweets <-
   select(date, text) %>%
   # Convert the ID field to the character data type
   mutate(date = as.character(date))
-
 head(clean_tweets)
 ```
 Καθαρίζω τα κείμενα λίγο...
@@ -186,8 +246,8 @@ clean_tweets$text <- gsub("@\\S*", "", clean_tweets$text)
 clean_tweets$text <- gsub("amp", "", clean_tweets$text) 
 clean_tweets$text <- gsub("[\r\n]", "", clean_tweets$text)
 clean_tweets$text <- gsub("[[:punct:]]", "", clean_tweets$text)
-
 ```
+
 
 Και δημιουργώ "tokens" δηλαδή σπάω τα κείμενα σε λέξεις
 
@@ -195,8 +255,7 @@ clean_tweets$text <- gsub("[[:punct:]]", "", clean_tweets$text)
 tokens <- 
   clean_tweets %>%
   unnest_tokens(output = word, input = text)
-
-tokens 
+ 
 ```
 καθαρίζω από λεξεις που δεν μεταφέρουν πληροφορία. Παραδειγμα?
 
@@ -298,4 +357,9 @@ neg_tokens_count %>%
     y = "Count"
   ) 
 ```
+
+<b><u>REFENCES</u></b><br>
+1. Dataset "COVID19 Tweets" by Gabriel Preda: https://www.kaggle.com/gpreda/covid19-tweets<br>
+2. Estrellado, R. A., Freer, E. A., Motsipak, J., Rosenberg, J. M., & Velásquez, I. C. (2020). Data science in education using R. London, England: Routledge. Nb. All authors contributed equally.<br>
+3. Introduction to Network Analysis with R, https://www.jessesadler.com/post/network-analysis-with-r/
 
